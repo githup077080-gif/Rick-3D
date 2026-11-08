@@ -122,10 +122,10 @@ private class RickGLSurfaceView(context: android.content.Context) : GLSurfaceVie
         renderMode = RENDERMODE_CONTINUOUSLY
     }
 
-    fun setTool(tool: EditorTool) { engineRenderer.setTool(tool) }
-    fun addObject(type: String) { queueEvent { engineRenderer.addObject(type) } }
-    fun clearAll() { queueEvent { engineRenderer.clearAll() } }
-    fun deleteSelected() { queueEvent { engineRenderer.deleteSelected() } }
+    fun setTool(tool: EditorTool) { activeTool = tool; engineRenderer.setTool(tool) }
+    fun addObject(type: String) { engineRenderer.addObject(type) }
+    fun clearAll() { engineRenderer.clearAll() }
+    fun deleteSelected() { engineRenderer.deleteSelected() }
     fun objectCount(): Int = engineRenderer.getObjectCount()
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
