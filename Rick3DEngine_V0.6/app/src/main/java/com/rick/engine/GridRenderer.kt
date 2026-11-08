@@ -133,7 +133,7 @@ class GridRenderer : GLSurfaceView.Renderer {
                 val lon1 = 2.0 * Math.PI * (j + 1) / slices
                 val a = point(lat0, lon0); val b = point(lat1, lon0)
                 val c = point(lat1, lon1); val d = point(lat0, lon1)
-                listOf(a,b,c,a,c,d).forEach { out.addAll(it) }
+                listOf(a,b,c,a,c,d).forEach { values -> values.forEach { value -> out.add(value) } }
             }
         }
         return out.toFloatArray()
