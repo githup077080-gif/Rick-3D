@@ -3,6 +3,8 @@ package com.rick.engine
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
+import org.json.JSONArray
+import org.json.JSONObject
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -21,6 +23,15 @@ private data class SceneObject(
     var z: Float,
     var rotationY: Float = 0f,
     var scale: Float = 1f
+)
+
+private data class SceneSnapshot(
+    val objects: List<SceneObject>,
+    val selectedId: Int,
+    val nextId: Int,
+    val yaw: Float,
+    val pitch: Float,
+    val distance: Float
 )
 
 class GridRenderer : GLSurfaceView.Renderer {
@@ -42,6 +53,9 @@ class GridRenderer : GLSurfaceView.Renderer {
     private var selectedId = -1
     @Volatile private var tool = EditorTool.SELECT
     private val objects = mutableListOf<SceneObject>()
+    private val undoStack = ArrayDeque<SceneSnapshot>()
+    private val redoStack = ArrayDeque<SceneSnapshot>()
+    private var transformActionOpen = false
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         GLES30.glClearColor(0.075f, 0.09f, 0.12f, 1f)
@@ -102,7 +116,7 @@ class GridRenderer : GLSurfaceView.Renderer {
         )
         val idx = intArrayOf(
             0,1,2,0,2,3, 4,5,6,4,6,7, 8,9,10,8,10,11,
-            12,13,14,12,14,15, 16,17,18,16,18,19, 20,21,22,20,22,23
+            12,13,14,12,13,14, 16,17,18,16,18,19, 20,21,22,20,22,23
         )
         return idx.flatMap { i -> listOf(p[i*3], p[i*3+1], p[i*3+2]) }.toFloatArray()
     }
@@ -173,21 +187,134 @@ class GridRenderer : GLSurfaceView.Renderer {
         GLES30.glDrawArrays(mode, 0, count)
     }
 
+    private fun snapshotState(): SceneSnapshot = SceneSnapshot(
+        objects.map { it.copy() }, selectedId, nextId, yaw, pitch, distance
+    )
+
+    private fun restoreState(state: SceneSnapshot) {
+        objects.clear()
+        objects.addAll(state.objects.map { it.copy() })
+        selectedId = state.selectedId
+        nextId = state.nextId
+        yaw = state.yaw
+        pitch = state.pitch
+        distance = state.distance
+    }
+
+    private fun recordUndo() {
+        undoStack.addLast(snapshotState())
+        while (undoStack.size > 50) undoStack.removeFirst()
+        redoStack.clear()
+    }
+
+    fun beginTransformAction() = synchronized(objects) {
+        if (!transformActionOpen) {
+            recordUndo()
+            transformActionOpen = true
+        }
+    }
+
+    fun endTransformAction() = synchronized(objects) { transformActionOpen = false }
+
+    fun undo(): Boolean = synchronized(objects) {
+        if (undoStack.isEmpty()) return@synchronized false
+        redoStack.addLast(snapshotState())
+        restoreState(undoStack.removeLast())
+        true
+    }
+
+    fun redo(): Boolean = synchronized(objects) {
+        if (redoStack.isEmpty()) return@synchronized false
+        undoStack.addLast(snapshotState())
+        restoreState(redoStack.removeLast())
+        true
+    }
+
     fun addObject(type: String) = synchronized(objects) {
+        if (type != "cube" && type != "sphere") return@synchronized
+        recordUndo()
         val n = objects.size
         val id = nextId++
         objects.add(SceneObject(id, type, ((n % 5) - 2) * 2.1f, 0.8f, (n / 5) * 2.1f))
         selectedId = id
-        id
     }
 
-    fun clearAll() = synchronized(objects) { objects.clear(); selectedId = -1 }
+    fun clearAll() = synchronized(objects) {
+        if (objects.isNotEmpty()) recordUndo()
+        objects.clear()
+        selectedId = -1
+    }
+
     fun deleteSelected() = synchronized(objects) {
+        if (objects.none { it.id == selectedId }) return@synchronized
+        recordUndo()
         objects.removeAll { it.id == selectedId }
         selectedId = -1
     }
+
     fun setTool(value: EditorTool) { tool = value }
     fun getObjectCount(): Int = synchronized(objects) { objects.size }
+
+    fun exportSceneJson(): String = synchronized(objects) {
+        val root = JSONObject()
+        root.put("format", "rick3d-scene")
+        root.put("version", 1)
+        root.put("cameraYaw", yaw.toDouble())
+        root.put("cameraPitch", pitch.toDouble())
+        root.put("cameraDistance", distance.toDouble())
+        val array = JSONArray()
+        objects.forEach { obj ->
+            array.put(JSONObject().apply {
+                put("id", obj.id)
+                put("type", obj.type)
+                put("x", obj.x.toDouble())
+                put("y", obj.y.toDouble())
+                put("z", obj.z.toDouble())
+                put("rotationY", obj.rotationY.toDouble())
+                put("scale", obj.scale.toDouble())
+            })
+        }
+        root.put("objects", array)
+        root.toString(2)
+    }
+
+    fun importSceneJson(json: String) = synchronized(objects) {
+        val root = JSONObject(json)
+        require(root.optString("format") == "rick3d-scene") { "فرمت فایل Rick 3D نیست" }
+        require(root.optInt("version", -1) == 1) { "نسخه فایل پشتیبانی نمی‌شود" }
+        val array = root.getJSONArray("objects")
+        require(array.length() <= 10000) { "تعداد اشیا بیش از حد مجاز است" }
+        val loaded = ArrayList<SceneObject>()
+        var maxId = 0
+        for (i in 0 until array.length()) {
+            val item = array.getJSONObject(i)
+            val type = item.getString("type")
+            require(type == "cube" || type == "sphere") { "نوع شیء ناشناخته است" }
+            val id = item.getInt("id")
+            require(id > 0 && loaded.none { it.id == id }) { "شناسه شیء نامعتبر یا تکراری است" }
+            val x = item.getDouble("x").toFloat()
+            val y = item.getDouble("y").toFloat()
+            val z = item.getDouble("z").toFloat()
+            val rotation = item.optDouble("rotationY", 0.0).toFloat()
+            val scale = item.optDouble("scale", 1.0).toFloat()
+            require(listOf(x, y, z, rotation, scale).all { it.isFinite() }) { "مقدار عددی نامعتبر است" }
+            require(scale in 0.15f..5f) { "اندازه شیء خارج از محدوده است" }
+            loaded.add(SceneObject(id, type, x, y, z, rotation, scale))
+            maxId = maxOf(maxId, id)
+        }
+        val newYaw = root.optDouble("cameraYaw", 0.75).toFloat()
+        val newPitch = root.optDouble("cameraPitch", 0.72).toFloat()
+        val newDistance = root.optDouble("cameraDistance", 13.0).toFloat()
+        require(listOf(newYaw, newPitch, newDistance).all { it.isFinite() }) { "تنظیمات دوربین نامعتبر است" }
+        recordUndo()
+        objects.clear()
+        objects.addAll(loaded)
+        selectedId = -1
+        nextId = maxId + 1
+        yaw = newYaw
+        pitch = newPitch.coerceIn(0.12f, 1.48f)
+        distance = newDistance.coerceIn(3.5f, 65f)
+    }
 
     fun selectAt(px: Float, py: Float, width: Int, height: Int) = synchronized(objects) {
         var bestId = -1
