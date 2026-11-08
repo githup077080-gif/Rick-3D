@@ -1,7 +1,12 @@
-# Rick 3D Engine — Starter package
+# Rick 3D Engine
 
-Source files from the uploaded starter archive are in [Rick3DEngine_V0.3](./Rick3DEngine_V0.3/).
+پروژهٔ موتور بازی‌سازی سه‌بعدی اختصاصی با ویرایشگر لمسی اندروید.
 
-**Important:** this archive is labeled 0.3.0, but its Android app configuration and UI still identify themselves as 0.2.0. The included implementation currently provides an OpenGL ES 3 grid, cube/sphere creation, clearing objects, one-finger camera orbit, and two-finger zoom. The visible select/move/rotate/scale tool buttons are not implemented as working object tools yet.
+## نسخه‌ها
+- [نسخهٔ 0.4.0 — ابزارهای لمسی انتخاب، حرکت، چرخش و اندازه](./Rick3DEngine_V0.4/)
+- [نسخهٔ 0.3.0 — نسخهٔ آغازین](./Rick3DEngine_V0.3/)
 
-This is source code only. It has not been compiled or tested on a device.
+## وضعیت نسخهٔ 0.4
+سورس نسخهٔ 0.4 در مسیر `Rick3DEngine_V0.4` قرار دارد. قابلیت‌های ابزارها در README همان پوشه توضیح داده شده‌اند.
+
+**توجه:** این مخزن شامل سورس کد است؛ نسخهٔ 0.4 هنوز در این محیط کامپایل و روی گوشی آزمایش نشده و APK تأییدشده‌ای در مخزن منتشر نشده است.
