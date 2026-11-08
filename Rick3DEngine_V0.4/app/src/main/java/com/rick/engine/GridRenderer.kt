@@ -40,7 +40,7 @@ class GridRenderer : GLSurfaceView.Renderer {
     private var distance = 13f
     private var nextId = 1
     private var selectedId = -1
-    private var tool = EditorTool.SELECT
+    @Volatile private var tool = EditorTool.SELECT
     private val objects = mutableListOf<SceneObject>()
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
