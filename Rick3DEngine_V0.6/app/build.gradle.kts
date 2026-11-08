@@ -16,20 +16,18 @@ android {
         versionName = "0.6.1"
     }
 
-    // Keep Java and Kotlin bytecode targets aligned with the JDK 17
-    // used by the Android build workflow.
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
     buildFeatures {
         compose = true
     }
-}
-
-kotlinOptions {
-    jvmTarget = "17"
 }
 
 dependencies {
