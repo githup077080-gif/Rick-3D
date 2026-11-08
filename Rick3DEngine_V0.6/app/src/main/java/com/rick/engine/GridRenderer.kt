@@ -116,7 +116,7 @@ class GridRenderer : GLSurfaceView.Renderer {
         )
         val idx = intArrayOf(
             0,1,2,0,2,3, 4,5,6,4,6,7, 8,9,10,8,10,11,
-            12,13,14,12,13,14, 16,17,18,16,18,19, 20,21,22,20,22,23
+            12,13,14,12,14,15, 16,17,18,16,18,19, 20,21,22,20,22,23
         )
         return idx.flatMap { i -> listOf(p[i*3], p[i*3+1], p[i*3+2]) }.toFloatArray()
     }
