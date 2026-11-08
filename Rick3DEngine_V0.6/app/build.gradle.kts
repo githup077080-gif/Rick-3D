@@ -3,9 +3,11 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
 android {
     namespace = "com.rick.engine"
     compileSdk = 35
+
     defaultConfig {
         applicationId = "com.rick.engine.v6"
         minSdk = 26
@@ -13,8 +15,23 @@ android {
         versionCode = 61
         versionName = "0.6.1"
     }
-    buildFeatures { compose = true }
+
+    // Keep Java and Kotlin bytecode targets aligned with the JDK 17
+    // used by the Android build workflow.
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        compose = true
+    }
 }
+
+kotlinOptions {
+    jvmTarget = "17"
+}
+
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.activity:activity-compose:1.10.0")
