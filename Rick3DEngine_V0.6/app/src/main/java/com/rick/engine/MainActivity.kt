@@ -5,6 +5,8 @@ import android.os.Bundle
 import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -12,8 +14,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import kotlin.math.hypot
 
 class MainActivity : ComponentActivity() {
@@ -25,10 +30,41 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun RickEditor() {
+    val context = LocalContext.current
     var tool by remember { mutableStateOf(EditorTool.SELECT) }
     var count by remember { mutableIntStateOf(0) }
     var refresh by remember { mutableIntStateOf(0) }
+    var status by remember { mutableStateOf("آماده") }
     var glView by remember { mutableStateOf<RickGLSurfaceView?>(null) }
+
+    val saveLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                val json = glView?.exportSceneJson() ?: error("موتور آماده نیست")
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(json) }
+                    ?: error("فایل برای نوشتن باز نشد")
+            }.onSuccess { status = "پروژه ذخیره شد" }
+             .onFailure { status = "خطا در ذخیره: ${it.message ?: "نامشخص"}" }
+        }
+    }
+
+    val openLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                val json = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    ?: error("فایل خوانده نشد")
+                glView?.importSceneJson(json) ?: error("موتور آماده نیست")
+            }.onSuccess {
+                count = glView?.objectCount() ?: 0
+                refresh++
+                status = "پروژه باز شد"
+            }.onFailure { status = "خطا در بازکردن: ${it.message ?: "نامشخص"}" }
+        }
+    }
 
     MaterialTheme {
         Column(Modifier.fillMaxSize().background(Color(0xFF151923))) {
@@ -37,12 +73,12 @@ private fun RickEditor() {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("RICK 3D ENGINE  •  0.6.0", color = Color.White)
+                Text("RICK 3D ENGINE  •  0.6.1", color = Color.White)
                 Text("ویرایشگر لمسی", color = Color(0xFF9FC5FF))
             }
             Row(Modifier.weight(1f).fillMaxWidth()) {
                 Column(
-                    Modifier.width(104.dp).fillMaxHeight().background(Color(0xFF202838)).padding(5.dp),
+                    Modifier.width(112.dp).fillMaxHeight().background(Color(0xFF202838)).padding(5.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     Text("ابزارها", color = Color.LightGray)
@@ -62,25 +98,56 @@ private fun RickEditor() {
                         ) { Text(label) }
                     }
                     HorizontalDivider(color = Color.DarkGray)
-                    Button(onClick = { glView?.addObject("cube"); count = glView?.objectCount() ?: count + 1; refresh++ },
-                        modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(2.dp)) { Text("+ مکعب") }
-                    Button(onClick = { glView?.addObject("sphere"); count = glView?.objectCount() ?: count + 1; refresh++ },
-                        modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(2.dp)) { Text("+ کره") }
-                    Button(onClick = { glView?.deleteSelected(); count = glView?.objectCount() ?: 0; refresh++ },
-                        modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(2.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B633D))) { Text("حذف انتخاب") }
-                    Button(onClick = { glView?.clearAll(); count = 0; refresh++ },
-                        modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(2.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B3D45))) { Text("پاک‌کردن") }
+                    Button(onClick = {
+                        glView?.addObject("cube")
+                        count = glView?.objectCount() ?: count + 1
+                        refresh++
+                    }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(2.dp)) { Text("+ مکعب") }
+                    Button(onClick = {
+                        glView?.addObject("sphere")
+                        count = glView?.objectCount() ?: count + 1
+                        refresh++
+                    }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(2.dp)) { Text("+ کره") }
+                    Button(onClick = {
+                        glView?.deleteSelected()
+                        count = glView?.objectCount() ?: 0
+                        refresh++
+                    }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(2.dp)) { Text("حذف انتخاب") }
+                    Button(onClick = {
+                        glView?.clearAll()
+                        count = 0
+                        refresh++
+                    }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(2.dp)) { Text("پاک‌کردن") }
+                    HorizontalDivider(color = Color.DarkGray)
+                    Button(onClick = { saveLauncher.launch("RickProject.json") },
+                        modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(2.dp)) { Text("ذخیره") }
+                    Button(onClick = { openLauncher.launch(arrayOf("application/json", "text/*")) },
+                        modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(2.dp)) { Text("بازکردن") }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Button(onClick = {
+                            if (glView?.undo() == true) {
+                                count = glView?.objectCount() ?: 0
+                                refresh++
+                                status = "بازگشت انجام شد"
+                            } else status = "عملی برای بازگشت نیست"
+                        }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(1.dp)) { Text("↶") }
+                        Button(onClick = {
+                            if (glView?.redo() == true) {
+                                count = glView?.objectCount() ?: 0
+                                refresh++
+                                status = "انجام دوباره شد"
+                            } else status = "عملی برای انجام دوباره نیست"
+                        }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(1.dp)) { Text("↷") }
+                    }
                 }
                 Box(Modifier.weight(1f).fillMaxHeight()) {
                     AndroidView(
                         modifier = Modifier.fillMaxSize(),
-                        factory = { context -> RickGLSurfaceView(context).also { glView = it; it.setTool(tool) } },
+                        factory = { ctx -> RickGLSurfaceView(ctx).also { glView = it; it.setTool(tool) } },
                         update = { glView = it; it.setTool(tool) }
                     )
                     Text(
-                        "ابزار: ${when(tool) { EditorTool.SELECT -> "انتخاب"; EditorTool.MOVE -> "حرکت"; EditorTool.ROTATE -> "چرخش"; EditorTool.SCALE -> "اندازه" }}  |  اشیا: $count\nSelect: لمس برای انتخاب و کشیدن برای چرخش دوربین • Move/Rotate/Scale: کشیدن شیء",
+                        "ابزار: ${when(tool) { EditorTool.SELECT -> "انتخاب"; EditorTool.MOVE -> "حرکت"; EditorTool.ROTATE -> "چرخش"; EditorTool.SCALE -> "اندازه" }} | اشیا: $count\n$status",
                         color = Color(0xFFCAD5E5),
                         modifier = Modifier.align(Alignment.BottomStart).padding(10.dp)
                     )
@@ -88,11 +155,10 @@ private fun RickEditor() {
                 Column(Modifier.width(142.dp).fillMaxHeight().background(Color(0xFF202838)).padding(9.dp)) {
                     Text("بازرس", color = Color.White)
                     Spacer(Modifier.height(8.dp))
-                    Text("نسخه 0.6.0", color = Color(0xFF9FC5FF))
+                    Text("نسخه 0.6.1", color = Color(0xFF9FC5FF))
                     Text("تعداد اشیا: $count", color = Color.LightGray)
                     Spacer(Modifier.height(18.dp))
                     Text("راهنما", color = Color.White)
-                    Text("Select: انتخاب", color = Color.LightGray)
                     Text("Move: جابه‌جایی XZ", color = Color.LightGray)
                     Text("Rotate: محور Y", color = Color.LightGray)
                     Text("Scale: یکنواخت", color = Color.LightGray)
@@ -102,7 +168,7 @@ private fun RickEditor() {
             Row(
                 Modifier.fillMaxWidth().height(30.dp).background(Color(0xFF202838)).padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
-            ) { Text("Rick 3D Engine • نسخهٔ توسعه‌ای 0.6.0", color = Color(0xFFB8C7DA)) }
+            ) { Text("Rick 3D Engine • نسخهٔ توسعه‌ای 0.6.1", color = Color(0xFFB8C7DA)) }
         }
     }
 }
@@ -127,6 +193,10 @@ private class RickGLSurfaceView(context: android.content.Context) : GLSurfaceVie
     fun clearAll() { engineRenderer.clearAll() }
     fun deleteSelected() { engineRenderer.deleteSelected() }
     fun objectCount(): Int = engineRenderer.getObjectCount()
+    fun exportSceneJson(): String = engineRenderer.exportSceneJson()
+    fun importSceneJson(json: String) = engineRenderer.importSceneJson(json)
+    fun undo(): Boolean = engineRenderer.undo()
+    fun redo(): Boolean = engineRenderer.redo()
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
@@ -134,6 +204,7 @@ private class RickGLSurfaceView(context: android.content.Context) : GLSurfaceVie
                 lastX = event.x; lastY = event.y
                 downX = event.x; downY = event.y
                 dragging = false
+                if (activeTool != EditorTool.SELECT) queueEvent { engineRenderer.beginTransformAction() }
             }
             MotionEvent.ACTION_POINTER_DOWN -> lastSpan = span(event)
             MotionEvent.ACTION_MOVE -> {
@@ -149,7 +220,7 @@ private class RickGLSurfaceView(context: android.content.Context) : GLSurfaceVie
                     val dy = event.y - lastY
                     if (hypot(event.x - downX, event.y - downY) > 10f) dragging = true
                     queueEvent {
-                        when (engineRendererTool()) {
+                        when (activeTool) {
                             EditorTool.SELECT -> engineRenderer.orbit(dx, dy)
                             else -> engineRenderer.transformSelected(dx, dy)
                         }
@@ -162,18 +233,18 @@ private class RickGLSurfaceView(context: android.content.Context) : GLSurfaceVie
                     val x = event.x; val y = event.y
                     queueEvent { engineRenderer.selectAt(x, y, width, height) }
                 }
+                queueEvent { engineRenderer.endTransformAction() }
                 lastSpan = 0f
             }
-            MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> lastSpan = 0f
+            MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
+                queueEvent { engineRenderer.endTransformAction() }
+                lastSpan = 0f
+            }
         }
         return true
     }
 
-    // The view mirrors the active tool so touch routing is deterministic.
     private var activeTool = EditorTool.SELECT
-    fun setActiveTool(tool: EditorTool) { activeTool = tool; engineRenderer.setTool(tool) }
-    private fun engineRendererTool() = activeTool
-
     private fun span(e: MotionEvent): Float {
         if (e.pointerCount < 2) return 0f
         return hypot(e.getX(0) - e.getX(1), e.getY(0) - e.getY(1))
